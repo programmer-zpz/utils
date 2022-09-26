@@ -150,7 +150,7 @@ func TestDualStackIPs(t *testing.T) {
 	for _, tc := range testCases {
 		ips := make([]net.IP, 0, len(tc.ips))
 		for _, ip := range tc.ips {
-			parsedIP := net.ParseIP(ip)
+			parsedIP := ParseIPSloppy(ip)
 			ips = append(ips, parsedIP)
 		}
 		dualStack, err := IsDualStackIPs(ips)
@@ -250,7 +250,7 @@ func TestDualStackCIDRs(t *testing.T) {
 	for _, tc := range testCases {
 		cidrs := make([]*net.IPNet, 0, len(tc.cidrs))
 		for _, cidr := range tc.cidrs {
-			_, parsedCIDR, _ := net.ParseCIDR(cidr)
+			_, parsedCIDR, _ := ParseCIDRSloppy(cidr)
 			cidrs = append(cidrs, parsedCIDR)
 		}
 
@@ -325,15 +325,15 @@ func TestIsIPv6(t *testing.T) {
 			expectIPv6: false,
 		},
 		{
-			ip:         net.ParseIP("127.0.0.1"),
+			ip:         ParseIPSloppy("127.0.0.1"),
 			expectIPv6: false,
 		},
 		{
-			ip:         net.ParseIP("10.20.40.40"),
+			ip:         ParseIPSloppy("10.20.40.40"),
 			expectIPv6: false,
 		},
 		{
-			ip:         net.ParseIP("172.17.3.0"),
+			ip:         ParseIPSloppy("172.17.3.0"),
 			expectIPv6: false,
 		},
 		{
@@ -349,11 +349,11 @@ func TestIsIPv6(t *testing.T) {
 			expectIPv6: true,
 		},
 		{
-			ip:         net.ParseIP("fd00::600d:f00d"),
+			ip:         ParseIPSloppy("fd00::600d:f00d"),
 			expectIPv6: true,
 		},
 		{
-			ip:         net.ParseIP("2001:db8::5"),
+			ip:         ParseIPSloppy("2001:db8::5"),
 			expectIPv6: true,
 		},
 	}
@@ -440,10 +440,189 @@ func TestIsIPv6CIDR(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		_, cidr, _ := net.ParseCIDR(tc.cidr)
+		_, cidr, _ := ParseCIDRSloppy(tc.cidr)
 		res := IsIPv6CIDR(cidr)
 		if res != tc.expectResult {
 			t.Errorf("%v: want IsIPv6CIDR=%v, got %v", tc.desc, tc.expectResult, res)
+		}
+	}
+}
+
+func TestIsIPv4String(t *testing.T) {
+	testCases := []struct {
+		ip         string
+		expectIPv4 bool
+	}{
+		{
+			ip:         "127.0.0.1",
+			expectIPv4: true,
+		},
+		{
+			ip:         "192.168.0.0",
+			expectIPv4: true,
+		},
+		{
+			ip:         "1.2.3.4",
+			expectIPv4: true,
+		},
+		{
+			ip:         "bad ip",
+			expectIPv4: false,
+		},
+		{
+			ip:         "::1",
+			expectIPv4: false,
+		},
+		{
+			ip:         "fd00::600d:f00d",
+			expectIPv4: false,
+		},
+		{
+			ip:         "2001:db8::5",
+			expectIPv4: false,
+		},
+	}
+	for i := range testCases {
+		isIPv4 := IsIPv4String(testCases[i].ip)
+		if isIPv4 != testCases[i].expectIPv4 {
+			t.Errorf("[%d] Expect ipv4 %v, got %v", i+1, testCases[i].expectIPv4, isIPv4)
+		}
+	}
+}
+
+func TestIsIPv4(t *testing.T) {
+	testCases := []struct {
+		ip         net.IP
+		expectIPv4 bool
+	}{
+		{
+			ip:         net.IPv4zero,
+			expectIPv4: true,
+		},
+		{
+			ip:         net.IPv4bcast,
+			expectIPv4: true,
+		},
+		{
+			ip:         ParseIPSloppy("127.0.0.1"),
+			expectIPv4: true,
+		},
+		{
+			ip:         ParseIPSloppy("10.20.40.40"),
+			expectIPv4: true,
+		},
+		{
+			ip:         ParseIPSloppy("172.17.3.0"),
+			expectIPv4: true,
+		},
+		{
+			ip:         nil,
+			expectIPv4: false,
+		},
+		{
+			ip:         net.IPv6loopback,
+			expectIPv4: false,
+		},
+		{
+			ip:         net.IPv6zero,
+			expectIPv4: false,
+		},
+		{
+			ip:         ParseIPSloppy("fd00::600d:f00d"),
+			expectIPv4: false,
+		},
+		{
+			ip:         ParseIPSloppy("2001:db8::5"),
+			expectIPv4: false,
+		},
+	}
+	for i := range testCases {
+		isIPv4 := IsIPv4(testCases[i].ip)
+		if isIPv4 != testCases[i].expectIPv4 {
+			t.Errorf("[%d] Expect ipv4 %v, got %v", i+1, testCases[i].expectIPv4, isIPv4)
+		}
+	}
+}
+
+func TestIsIPv4CIDRString(t *testing.T) {
+	testCases := []struct {
+		desc         string
+		cidr         string
+		expectResult bool
+	}{
+		{
+			desc:         "ipv4 CIDR 1",
+			cidr:         "10.0.0.0/8",
+			expectResult: true,
+		},
+		{
+			desc:         "ipv4 CIDR 2",
+			cidr:         "192.168.0.0/16",
+			expectResult: true,
+		},
+		{
+			desc:         "ipv6 CIDR 1",
+			cidr:         "::/1",
+			expectResult: false,
+		},
+		{
+			desc:         "ipv6 CIDR 2",
+			cidr:         "2000::/10",
+			expectResult: false,
+		},
+		{
+			desc:         "ipv6 CIDR 3",
+			cidr:         "2001:db8::/32",
+			expectResult: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		res := IsIPv4CIDRString(tc.cidr)
+		if res != tc.expectResult {
+			t.Errorf("%v: want IsIPv4CIDRString=%v, got %v", tc.desc, tc.expectResult, res)
+		}
+	}
+}
+
+func TestIsIPv4CIDR(t *testing.T) {
+	testCases := []struct {
+		desc         string
+		cidr         string
+		expectResult bool
+	}{
+		{
+			desc:         "ipv4 CIDR 1",
+			cidr:         "10.0.0.0/8",
+			expectResult: true,
+		},
+		{
+			desc:         "ipv4 CIDR 2",
+			cidr:         "192.168.0.0/16",
+			expectResult: true,
+		},
+		{
+			desc:         "ipv6 CIDR 1",
+			cidr:         "::/1",
+			expectResult: false,
+		},
+		{
+			desc:         "ipv6 CIDR 2",
+			cidr:         "2000::/10",
+			expectResult: false,
+		},
+		{
+			desc:         "ipv6 CIDR 3",
+			cidr:         "2001:db8::/32",
+			expectResult: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		_, cidr, _ := ParseCIDRSloppy(tc.cidr)
+		res := IsIPv4CIDR(cidr)
+		if res != tc.expectResult {
+			t.Errorf("%v: want IsIPv4CIDR=%v, got %v", tc.desc, tc.expectResult, res)
 		}
 	}
 }
@@ -547,7 +726,7 @@ func TestRangeSize(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		_, cidr, err := net.ParseCIDR(tc.cidr)
+		_, cidr, err := ParseCIDRSloppy(tc.cidr)
 		if err != nil {
 			t.Errorf("failed to parse cidr for test %s, unexpected error: '%s'", tc.name, err)
 		}
@@ -582,10 +761,38 @@ func TestGetIndexedIP(t *testing.T) {
 			expectError: false,
 			expectedIP:  "192.168.1.255",
 		},
+		{
+			cidr:        "255.255.255.0/24",
+			index:       256,
+			expectError: true,
+		},
+		{
+			cidr:        "fd:11:b2:be::/120",
+			index:       20,
+			expectError: false,
+			expectedIP:  "fd:11:b2:be::14",
+		},
+		{
+			cidr:        "fd:11:b2:be::/126",
+			index:       10,
+			expectError: true,
+		},
+		{
+			cidr:        "fd:11:b2:be::/120",
+			index:       255,
+			expectError: false,
+			expectedIP:  "fd:11:b2:be::ff",
+		},
+		{
+			cidr:        "00:00:00:be::/120",
+			index:       255,
+			expectError: false,
+			expectedIP:  "::be:0:0:0:ff",
+		},
 	}
 
 	for _, tc := range testCases {
-		_, subnet, err := net.ParseCIDR(tc.cidr)
+		_, subnet, err := ParseCIDRSloppy(tc.cidr)
 		if err != nil {
 			t.Errorf("failed to parse cidr %s, unexpected error: '%s'", tc.cidr, err)
 		}
